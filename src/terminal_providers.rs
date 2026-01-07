@@ -3,6 +3,9 @@ use crate::{
     TerminalType, errors::TermResult,
 };
 
+#[allow(unused_imports)]
+use crate::errors::RelaunchError;
+
 /// Common environment variable names used in terminal identification.
 pub const TERM_PROGRAM_VAR: &str = "TERM_PROGRAM";
 
