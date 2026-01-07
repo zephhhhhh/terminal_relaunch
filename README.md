@@ -1,5 +1,10 @@
 # Terminal Relaunch
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://github.com/zephhhhhh/terminal_relaunch/actions/workflows/rust.yml/badge.svg)](https://github.com/zephhhhhh/terminal_relaunch/actions/workflows/rust.yml)
+[![Static Badge](https://img.shields.io/badge/pages-Docs-informational?logo=github)](https://docs.rs/terminal_relaunch)
+
 A simple Rust library for detecting terminal capabilities and relaunching programs in better terminals with enhanced feature support,
 such as RGB ANSI colour and full Unicode rendering support for emojis, etc.
 
