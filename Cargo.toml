@@ -1,0 +1,33 @@
+[package]
+name = "terminal_relaunch"
+version = "0.1.0"
+edition = "2024"
+authors = ["zephhhhhh"]
+license = "MIT"
+description = "A simple small library for relaunching the program in an alternative installed terminal with better feature support"
+repository = "https://github.com/zephhhhhh/kitlang"
+keywords = [
+    "terminal",
+    "cli",
+    "library",
+    "relaunch",
+    "tui",
+]
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "terminal-user-interfaces",
+]
+
+[features]
+default = []
+logging = ["dep:log"]
+
+[dependencies]
+thiserror = "2.0.17"
+strum = { version = "0.27", features = ["derive"] }
+
+log = { version = "0.4.29", optional = true}
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

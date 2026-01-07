@@ -1,0 +1,76 @@
+# Terminal Relaunch
+
+A simple Rust library for detecting terminal capabilities and relaunching programs in better terminals with enhanced feature support,
+such as RGB ANSI colour and full Unicode rendering support for emojis, etc.
+
+## Features
+
+- **Terminal Detection**: Automatically identifies the current terminal type (Windows Terminal, CMD, VSCode, etc.)
+- **Feature Detection**: Checks for RGB/ANSI color support and full Unicode rendering
+- **Smart Relaunching**: Automatically find an installed and better terminal if available to relaunch your CLI app in.
+
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+terminal_relaunch = "0.1.0"
+```
+
+## Quick Start
+
+```rust
+use terminal_relaunch::{relaunch_if_available_and_exit, CURRENT_TERMINAL};
+
+fn main() {
+    // Check if we should attempt to relaunch
+    match relaunch_if_available_and_exit() {
+        Ok(()) => println!("Terminal features met!"),
+        Err(e) => eprintln!("Terminal could not relaunch: {e:?}"),
+    }
+
+    // Continue with your application..
+    println!("Terminal information: {}", CURRENT_TERMINAL.verbose_format())
+}
+```
+
+## Usage
+
+### Detect Current Terminal
+
+```rust
+use terminal_relaunch::CURRENT_TERMINAL;
+
+println!("Terminal: {}", CURRENT_TERMINAL.verbose_format());
+```
+
+### Check Feature Support
+
+```rust
+use terminal_relaunch::{SUPPORTS_FULL_UNICODE, SUPPORTS_RGB_ANSI_COLOURS};
+
+if *SUPPORTS_FULL_UNICODE {
+    println!("✨ Unicode emojis work!");
+}
+
+if *SUPPORTS_RGB_ANSI_COLOURS {
+    println!("\x1b[38;2;255;0;0mRGB colors work!\x1b[0m");
+}
+```
+
+## Currently Supported Terminals
+
+### Detection
+
+- Windows Terminal, CMD/PowerShell,
+- Terminal.app, Generic Third Party MacOS terminal catch-all
+- Generic Linux Terminals
+
+### Relaunching
+
+- Windows Terminal
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
