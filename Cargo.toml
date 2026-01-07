@@ -16,7 +16,6 @@ keywords = [
 categories = [
     "command-line-utilities",
     "development-tools",
-    "terminal-user-interfaces",
 ]
 readme = "README.md"
 
