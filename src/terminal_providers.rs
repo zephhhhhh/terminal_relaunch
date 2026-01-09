@@ -122,11 +122,13 @@ impl TerminalProvider for WindowsTerminalProvider {
 }
 
 /// Escapes a string for safe embedding in a shell single-quoted string.
+#[allow(dead_code)]
 fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 /// Escapes a list of arguments for safe embedding in a shell command.
+#[allow(dead_code)]
 fn shell_escape_args(args: &[String]) -> String {
     args.iter()
         .map(|a| shell_escape(a))
