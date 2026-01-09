@@ -332,78 +332,6 @@ impl Display for TargetOperatingSystem {
     }
 }
 
-/// Get the parent process ID and name for a given process ID on Windows.
-#[cfg(target_os = "windows")]
-#[must_use]
-fn get_parent_pid_and_name(pid: u32) -> Option<(u32, String)> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
-        TH32CS_SNAPPROCESS,
-    };
-
-    unsafe {
-        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
-        #[allow(clippy::cast_possible_truncation)]
-        let mut entry = PROCESSENTRY32W {
-            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-            ..Default::default()
-        };
-
-        if Process32FirstW(snapshot, &raw mut entry).is_ok() {
-            loop {
-                if entry.th32ProcessID == pid {
-                    let len = entry
-                        .szExeFile
-                        .iter()
-                        .position(|&c| c == 0)
-                        .unwrap_or(entry.szExeFile.len());
-                    let parent_exe = String::from_utf16_lossy(&entry.szExeFile[..len]);
-
-                    if CloseHandle(snapshot).is_err() {
-                        logging::warning!("Failed to close process snapshot handle");
-                    }
-
-                    return Some((entry.th32ParentProcessID, parent_exe));
-                }
-
-                if Process32NextW(snapshot, &raw mut entry).is_err() {
-                    break;
-                }
-            }
-        }
-
-        if CloseHandle(snapshot).is_err() {
-            logging::warning!("Failed to close process snapshot handle");
-        }
-
-        None
-    }
-}
-
-/// Gets the process hierarchy (parent processes) for the given process ID.
-#[inline]
-#[must_use]
-fn get_process_hierarchy(mut pid: u32) -> Vec<(u32, String)> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut hierarchy = Vec::new();
-
-        while let Some((parent_pid, parent_name)) = get_parent_pid_and_name(pid) {
-            hierarchy.push((parent_pid, parent_name));
-            pid = parent_pid;
-        }
-
-        hierarchy
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Unsupported OS for process hierarchy detection
-        Vec::new()
-    }
-}
-
 /// Represents a kind of 'signature' that can be used to identify which terminal we are running in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TerminalSignature {
@@ -413,8 +341,49 @@ pub enum TerminalSignature {
     EnvVar(&'static str, &'static str),
     /// The environment variable `TERM_PROGRAM` must have a specific value.
     TermProgram(&'static str),
-    /// There must be a process with the given name in the process hierarchy. (Windows only)
-    ProgramInHierarchy(&'static str),
+    /// Returns `true` if the windows console delegation is set to a value in the windows registry.
+    WindowsConsoleDelegationSet,
+
+    /// Returns `true` if the windows console delegation is set to a value in the windows registry.
+    Any(&'static [TerminalSignature]),
+}
+
+/// Checks if Windows console delegation is set in the registry.
+/// If this is _NOT_ set, it means the default console host is being used (cmd)
+/// otherwise, it is being delegated to another terminal (e.g. Windows Terminal).
+#[inline]
+#[must_use]
+fn check_for_windows_registry_delegation() -> bool {
+    #[cfg(not(target_os = "windows"))]
+    {
+        return false;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::RegKey;
+        use winreg::enums::HKEY_CURRENT_USER;
+
+        let Ok(console) = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Console") else {
+            return false;
+        };
+        let Ok(startup) = console.open_subkey("%%Startup") else {
+            return false;
+        };
+
+        let Ok(delegation_console): Result<String, _> =
+            startup.get_value::<String, _>("DelegationConsole")
+        else {
+            return false;
+        };
+        let Ok(delegation_terminal): Result<String, _> =
+            startup.get_value::<String, _>("DelegationTerminal")
+        else {
+            return false;
+        };
+
+        delegation_console != delegation_terminal
+    }
 }
 
 impl TerminalSignature {
@@ -432,12 +401,8 @@ impl TerminalSignature {
                 matches!(std::env::var(TERM_PROGRAM_VAR).ok().as_deref(),
                     Some(v) if v.eq_ignore_ascii_case(var_value))
             }
-            Self::ProgramInHierarchy(program_name) => {
-                let hierarchy = get_process_hierarchy(std::process::id());
-                hierarchy
-                    .iter()
-                    .any(|(_, name)| name.eq_ignore_ascii_case(program_name))
-            }
+            Self::WindowsConsoleDelegationSet => check_for_windows_registry_delegation(),
+            Self::Any(sigs) => sigs.iter().any(TerminalSignature::check),
         }
     }
 }

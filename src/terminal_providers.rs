@@ -18,7 +18,10 @@ pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
     TerminalIdentifier {
         kind: TerminalType::WindowsTerminal,
         target_os: TargetOperatingSystem::Windows,
-        signatures: &[TermSig::ProgramInHierarchy("WindowsTerminal.exe")],
+        signatures: &[TermSig::Any(&[
+            TermSig::WindowsConsoleDelegationSet,
+            TermSig::EnvVarExists("WT_SESSION"),
+        ])],
     },
     TerminalIdentifier {
         kind: TerminalType::VSCode,
