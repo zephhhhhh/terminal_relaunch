@@ -144,14 +144,14 @@ impl TerminalProvider for ITerm2Provider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const ITERM_APP: &str = "/Applications/iTerm2.app";
+            const ITERM_APP: &str = "/Applications/iTerm.app";
 
             std::path::Path::new(ITERM_APP).exists()
         })
     }
 
     fn relaunch_in_terminal(&self) -> TermResult<()> {
-        for_target!(self, "windows", {
+        for_target!(self, "macos", {
             let (curr_exe, curr_wd, args) = get_relaunch_params();
 
             let quoted_wd = shell_escape(&curr_wd.to_string_lossy());
@@ -162,21 +162,38 @@ impl TerminalProvider for ITerm2Provider {
 
             let script = format!(
                 r#"
-tell application "iTerm2"
+tell application "iTerm"
     activate
-    tell current window
-        create tab with default profile
-        tell current session
+    repeat 50 times
+        if (count of windows) > 0 then exit repeat
+        delay 0.1
+    end repeat
+    if (count of windows) > 0 then
+        tell current session of current window
             write text "{cmd}"
         end tell
-    end tell
+    else
+        error "no window" number 20
+    end if
 end tell
 "#
             );
 
-            Command::new("osascript").arg("-e").arg(script).spawn()?;
+            let res = Command::new("osascript")
+                .arg("-e")
+                .arg(script)
+                .spawn()?
+                .wait()?;
 
-            Ok(())
+            if res.success() {
+                Ok(())
+            } else {
+                crate::logging::error!("ITerm2 launch exited unsuccessfully!");
+                Err(RelaunchError::FailedToLaunchTerminal(
+                    self.terminal_type(),
+                    res.clone(),
+                ))
+            }
         })
     }
 }

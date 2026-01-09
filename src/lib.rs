@@ -68,7 +68,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     errors::{RelaunchError, TermResult},
-    terminal_providers::{TERM_PROGRAM_VAR, WindowsTerminalProvider},
+    terminal_providers::{ITerm2Provider, TERM_PROGRAM_VAR, WindowsTerminalProvider},
 };
 
 /// Represents the different types of terminals we can identify.
@@ -577,6 +577,7 @@ pub fn find_alternative_terminal() -> Option<Box<dyn TerminalProvider>> {
 pub fn get_provider_for_terminal(terminal_type: TerminalType) -> Option<Box<dyn TerminalProvider>> {
     match terminal_type {
         TerminalType::WindowsTerminal => Some(Box::new(WindowsTerminalProvider)),
+        TerminalType::ITerm2 => Some(Box::new(ITerm2Provider)),
         _ => None,
     }
 }
