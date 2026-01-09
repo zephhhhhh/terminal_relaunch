@@ -332,6 +332,78 @@ impl Display for TargetOperatingSystem {
     }
 }
 
+/// Get the parent process ID and name for a given process ID on Windows.
+#[cfg(target_os = "windows")]
+#[must_use]
+fn get_parent_pid_and_name(pid: u32) -> Option<(u32, String)> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+        TH32CS_SNAPPROCESS,
+    };
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        #[allow(clippy::cast_possible_truncation)]
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+
+        if Process32FirstW(snapshot, &raw mut entry).is_ok() {
+            loop {
+                if entry.th32ProcessID == pid {
+                    let len = entry
+                        .szExeFile
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(entry.szExeFile.len());
+                    let parent_exe = String::from_utf16_lossy(&entry.szExeFile[..len]);
+
+                    if CloseHandle(snapshot).is_err() {
+                        logging::warning!("Failed to close process snapshot handle");
+                    }
+
+                    return Some((entry.th32ParentProcessID, parent_exe));
+                }
+
+                if Process32NextW(snapshot, &raw mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+
+        if CloseHandle(snapshot).is_err() {
+            logging::warning!("Failed to close process snapshot handle");
+        }
+
+        None
+    }
+}
+
+/// Gets the process hierarchy (parent processes) for the given process ID.
+#[inline]
+#[must_use]
+fn get_process_hierarchy(mut pid: u32) -> Vec<(u32, String)> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut hierarchy = Vec::new();
+
+        while let Some((parent_pid, parent_name)) = get_parent_pid_and_name(pid) {
+            hierarchy.push((parent_pid, parent_name));
+            pid = parent_pid;
+        }
+
+        hierarchy
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Unsupported OS for process hierarchy detection
+        Vec::new()
+    }
+}
+
 /// Represents a kind of 'signature' that can be used to identify which terminal we are running in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TerminalSignature {
@@ -341,6 +413,33 @@ pub enum TerminalSignature {
     EnvVar(&'static str, &'static str),
     /// The environment variable `TERM_PROGRAM` must have a specific value.
     TermProgram(&'static str),
+    /// There must be a process with the given name in the process hierarchy. (Windows only)
+    ProgramInHierarchy(&'static str),
+}
+
+impl TerminalSignature {
+    /// Checks if the terminal signature is met.
+    #[inline]
+    #[must_use]
+    pub fn check(&self) -> bool {
+        match self {
+            Self::EnvVarExists(var_name) => std::env::var(var_name).is_ok(),
+            Self::EnvVar(var, value) => {
+                matches!(std::env::var(var).ok().as_deref(),
+                    Some(v) if v.eq_ignore_ascii_case(value))
+            }
+            Self::TermProgram(var_value) => {
+                matches!(std::env::var(TERM_PROGRAM_VAR).ok().as_deref(),
+                    Some(v) if v.eq_ignore_ascii_case(var_value))
+            }
+            Self::ProgramInHierarchy(program_name) => {
+                let hierarchy = get_process_hierarchy(std::process::id());
+                hierarchy
+                    .iter()
+                    .any(|(_, name)| name.eq_ignore_ascii_case(program_name))
+            }
+        }
+    }
 }
 
 /// Represents a terminal identifier, which consists of a terminal type and a set of signatures
@@ -387,22 +486,7 @@ pub fn find_current_terminal() -> TerminalType {
 
     for identifier in get_possible_terminal_identifiers_for(current_os) {
         // Check all signatures
-        let all_match = identifier
-            .signatures
-            .iter()
-            .all(|signature| match signature {
-                TerminalSignature::TermProgram(var_value) => {
-                    matches!(std::env::var(TERM_PROGRAM_VAR).ok().as_deref(),
-                        Some(v) if v.to_lowercase() == var_value.to_lowercase())
-                }
-                TerminalSignature::EnvVarExists(var_name) => std::env::var(var_name).is_ok(),
-                TerminalSignature::EnvVar(var, value) => {
-                    matches!(std::env::var(var).ok().as_deref(),
-                        Some(v) if v.to_lowercase() == value.to_lowercase())
-                }
-            });
-
-        if all_match {
+        if identifier.signatures.iter().all(TerminalSignature::check) {
             return identifier.kind;
         }
     }
