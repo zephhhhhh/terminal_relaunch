@@ -60,13 +60,15 @@ pub mod errors;
 pub mod logging;
 pub mod terminal_providers;
 
-use std::{fmt::Display, sync::LazyLock};
+use std::fmt::Display;
+use std::sync::LazyLock;
+use std::sync::atomic;
 
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{
     errors::{RelaunchError, TermResult},
-    terminal_providers::WindowsTerminalProvider,
+    terminal_providers::{TERM_PROGRAM_VAR, WindowsTerminalProvider},
 };
 
 /// Represents the different types of terminals we can identify.
@@ -75,25 +77,36 @@ use crate::{
 pub enum TerminalType {
     /// Unable to identify the terminal.
     Unknown,
+
+    // Windows terminals..
     #[default]
     /// Default `Windows` terminal (`cmd.exe` or `powershell.exe`).
     WindowsCMD,
-    /// Default `MacOS` terminal (Terminal.app).
-    MacOS,
     /// `Windows Terminal`. (terminal app from Microsoft Store `wt.exe`)
     WindowsTerminal,
-    /// `VS Code` embedded terminal.
-    VSCode,
+
+    // MacOS terminals..
+    /// Default `MacOS` terminal (Terminal.app).
+    MacOS,
+    /// Third party `MacOS` terminal `iTerm2`.
+    ITerm2,
     /// Third party `MacOS` terminal (`iTerm2`, `Alacritty`, etc).
     /// We just assume that if we are on `MacOS` and not in the default terminal,
     /// then we are in a third party terminal.
     ///
     /// **TODO**: Improve detection for specific third party terminals.
     ThirdPartyMacOSTerminal,
+
     /// Default `Linux` terminal (`GNOME Terminal`, `Konsole`, etc).
     ///
     /// **TODO**: Improve detection for specific Linux terminals.
     LinuxTerminal,
+
+    // Editor terminals..
+    /// `VS Code` embedded terminal.
+    VSCode,
+    /// `NVim` terminal (e.g. `nvim-qt`, `neovide`, etc).
+    Nvim,
 }
 
 impl TerminalType {
@@ -104,10 +117,12 @@ impl TerminalType {
         match self {
             Self::Unknown => "Unknown",
             Self::WindowsCMD => "Windows CMD",
-            Self::MacOS => "MacOS Terminal",
             Self::WindowsTerminal => "Windows Terminal",
-            Self::VSCode => "VSCode Terminal",
+            Self::MacOS => "MacOS Terminal",
+            Self::ITerm2 => "iTerm2 Terminal",
             Self::ThirdPartyMacOSTerminal => "Third Party MacOS Terminal",
+            Self::VSCode => "VSCode Terminal",
+            Self::Nvim => "NVIM Terminal",
             Self::LinuxTerminal => "Linux Terminal",
         }
     }
@@ -121,7 +136,10 @@ impl TerminalType {
             Self::MacOS => Some("Terminal.app"),
             Self::WindowsTerminal => Some("wt.exe"),
             Self::VSCode => Some("Code.exe"),
-            Self::Unknown | Self::ThirdPartyMacOSTerminal | Self::LinuxTerminal => None,
+            Self::ITerm2 => Some("iTerm2.app"),
+            Self::Unknown | Self::ThirdPartyMacOSTerminal | Self::LinuxTerminal | Self::Nvim => {
+                None
+            }
         }
     }
 
@@ -131,8 +149,10 @@ impl TerminalType {
     pub fn target_os(&self) -> TargetOperatingSystem {
         match self {
             Self::WindowsCMD | Self::WindowsTerminal => TargetOperatingSystem::Windows,
-            Self::MacOS | Self::ThirdPartyMacOSTerminal => TargetOperatingSystem::MacOS,
-            Self::VSCode => TargetOperatingSystem::Any,
+            Self::MacOS | Self::ITerm2 | Self::ThirdPartyMacOSTerminal => {
+                TargetOperatingSystem::MacOS
+            }
+            Self::VSCode | Self::Nvim => TargetOperatingSystem::Any,
             Self::LinuxTerminal => TargetOperatingSystem::Linux,
             Self::Unknown => TargetOperatingSystem::Invalid,
         }
@@ -147,6 +167,8 @@ impl TerminalType {
             Self::WindowsCMD
             | Self::WindowsTerminal
             | Self::VSCode
+            | Self::Nvim
+            | Self::ITerm2
             | Self::ThirdPartyMacOSTerminal
             | Self::LinuxTerminal => true,
         }
@@ -160,6 +182,8 @@ impl TerminalType {
             Self::Unknown | Self::WindowsCMD | Self::MacOS => false,
             Self::WindowsTerminal
             | Self::VSCode
+            | Self::Nvim
+            | Self::ITerm2
             | Self::ThirdPartyMacOSTerminal
             | Self::LinuxTerminal => true,
         }
@@ -187,12 +211,12 @@ impl TerminalType {
             ""
         };
         let exec_name = if let Some(exec_name) = self.exec_name() {
-            format!("({exec_name})")
+            format!(" ({exec_name})")
         } else {
             String::new()
         };
 
-        format!("{} {}{}{}", self.name(), exec_name, unicode, rgb)
+        format!("{}{}{}{}", self.name(), exec_name, unicode, rgb)
     }
 }
 
@@ -315,6 +339,8 @@ pub enum TerminalSignature {
     EnvVarExists(&'static str),
     /// An environment variable that must exist, and have a specific value.
     EnvVar(&'static str, &'static str),
+    /// The environment variable `TERM_PROGRAM` must have a specific value.
+    TermProgram(&'static str),
 }
 
 /// Represents a terminal identifier, which consists of a terminal type and a set of signatures
@@ -365,11 +391,14 @@ pub fn find_current_terminal() -> TerminalType {
             .signatures
             .iter()
             .all(|signature| match signature {
-                TerminalSignature::EnvVarExists(var_name) => {
-                    std::env::var(var_name).is_ok()
+                TerminalSignature::TermProgram(var_value) => {
+                    matches!(std::env::var(TERM_PROGRAM_VAR).ok().as_deref(),
+                        Some(v) if v.to_lowercase() == var_value.to_lowercase())
                 }
+                TerminalSignature::EnvVarExists(var_name) => std::env::var(var_name).is_ok(),
                 TerminalSignature::EnvVar(var, value) => {
-                    matches!(std::env::var(var).ok().as_deref(), Some(v) if v.to_lowercase() == value.to_lowercase())
+                    matches!(std::env::var(var).ok().as_deref(),
+                        Some(v) if v.to_lowercase() == value.to_lowercase())
                 }
             });
 
@@ -401,15 +430,96 @@ pub fn has_been_relaunched() -> bool {
     std::env::args().any(|arg| arg == RELAUNCHED_ARGUMENT)
 }
 
+/// Constant indicating no override for is active.
+const NO_OVERRIDE: u8 = 0;
+/// Constant indicating override is true.
+const OVERRIDE_TRUE: u8 = 1;
+/// Constant indicating override is false.
+const OVERRIDE_FALSE: u8 = 2;
+
+/// Global override for unicode support detection.
+static OVERRIDE_UNICODE_SUPPORT: atomic::AtomicU8 = atomic::AtomicU8::new(NO_OVERRIDE);
+/// Global override for unicode support detection.
+static OVERRIDE_RGB_ANSI_COLOURS: atomic::AtomicU8 = atomic::AtomicU8::new(NO_OVERRIDE);
+
+/// Stores the override value into the given atomic target.
+#[inline]
+fn store_override(target: &atomic::AtomicU8, supports: Option<bool>) {
+    match supports {
+        Some(true) => target.store(OVERRIDE_TRUE, atomic::Ordering::SeqCst),
+        Some(false) => target.store(OVERRIDE_FALSE, atomic::Ordering::SeqCst),
+        None => target.store(NO_OVERRIDE, atomic::Ordering::SeqCst),
+    }
+}
+
+/// Reads the override value from the given atomic target.
+#[inline]
+fn read_override(target: &atomic::AtomicU8) -> Option<bool> {
+    match target.load(atomic::Ordering::SeqCst) {
+        OVERRIDE_TRUE => Some(true),
+        OVERRIDE_FALSE => Some(false),
+        _ => None,
+    }
+}
+
+/// Overrides the detected full unicode support for the current terminal.
+///
+/// # Notes
+/// If `supports` is `None`, the override is cleared and automatic detection is used again.
+#[inline]
+pub fn set_unicode_support_override(supports: Option<bool>) {
+    store_override(&OVERRIDE_UNICODE_SUPPORT, supports);
+}
+
+/// Overrides the detected RGB (ANSI) colour support for the current terminal.
+///
+/// # Notes
+/// If `supports` is `None`, the override is cleared and automatic detection is used again.
+#[inline]
+pub fn set_rgb_ansi_override(supports: Option<bool>) {
+    store_override(&OVERRIDE_RGB_ANSI_COLOURS, supports);
+}
+
+/// Reads the current override for full unicode support detection.
+/// # Returns
+/// *   `Some(overriden_state)` if full unicode support is overridden.
+/// *   `None` if no override is set and automatic detection should be used.
+#[inline]
+#[must_use]
+pub fn is_unicode_overridden() -> Option<bool> {
+    read_override(&OVERRIDE_UNICODE_SUPPORT)
+}
+
+/// Reads the current override for rgb (ANSI) colour support detection.
+/// # Returns
+/// *   `Some(overriden_state)` if full unicode support is overridden.
+/// *   `None` if no override is set and automatic detection should be used.
+#[inline]
+#[must_use]
+pub fn is_rgb_ansi_overridden() -> Option<bool> {
+    read_override(&OVERRIDE_RGB_ANSI_COLOURS)
+}
+
 /// The current terminal type detected at runtime.
 pub static CURRENT_TERMINAL: LazyLock<TerminalType> = LazyLock::new(find_current_terminal);
 
 /// If the current terminal supports full unicode rendering.
-pub static SUPPORTS_FULL_UNICODE: LazyLock<bool> =
-    LazyLock::new(|| CURRENT_TERMINAL.supports_full_unicode());
+pub static SUPPORTS_FULL_UNICODE: LazyLock<bool> = LazyLock::new(|| {
+    if let Some(override_state) = is_unicode_overridden() {
+        override_state
+    } else {
+        CURRENT_TERMINAL.supports_full_unicode()
+    }
+});
+
 /// If the current terminal supports full RGB (ANSI) colours.
-pub static SUPPORTS_RGB_ANSI_COLOURS: LazyLock<bool> =
-    LazyLock::new(|| CURRENT_TERMINAL.supports_rgb_ansi_colours());
+pub static SUPPORTS_RGB_ANSI_COLOURS: LazyLock<bool> = LazyLock::new(|| {
+    if let Some(override_state) = is_unicode_overridden() {
+        override_state
+    } else {
+        CURRENT_TERMINAL.supports_rgb_ansi_colours()
+    }
+});
 
 /// Argument passed to relaunched terminals to indicate a relaunch has occurred.
 pub const RELAUNCHED_ARGUMENT: &str = "--relaunched-term";
@@ -541,8 +651,27 @@ pub fn relaunch_if_available() -> TermResult<bool> {
 pub fn relaunch_if_available_and_exit() -> TermResult<()> {
     const DEFAULT_EXIT_CODE: i32 = 0;
 
+    relaunch_if_available_and_exit_with(DEFAULT_EXIT_CODE)
+}
+
+/// Attempts to relaunch the current program in a preferred terminal, if we have not already relaunched the application,
+/// and if the current terminal does not meet the preferred terminal requirements, i.e. full unicode and RGB (ANSI) colour support.
+/// and an alternative preferred terminal is found and installed.
+///
+/// If an alternative preferred terminal is found and the relaunch is successful,
+/// this function will exit the current process, with the given exit code.
+///
+/// # Errors
+/// Returns a `RelaunchError` if no preferred terminal is found or if the relaunch fails.
+///
+/// # Returns
+/// *   `Ok(())` if the program was already relaunched, or the current terminal meets the feature requirements,
+///     and program execution can continue as normal.
+/// *   `Err(RelaunchError)` if no preferred terminal is found or if the relaunch fails.
+#[inline]
+pub fn relaunch_if_available_and_exit_with(exit_code: i32) -> TermResult<()> {
     if relaunch_if_available()? {
-        std::process::exit(DEFAULT_EXIT_CODE);
+        std::process::exit(exit_code);
     }
 
     Ok(())

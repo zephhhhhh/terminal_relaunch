@@ -1,47 +1,87 @@
+use std::path::PathBuf;
+use std::process::Command;
+
 use crate::{
     TargetOperatingSystem, TerminalIdentifier, TerminalProvider, TerminalSignature as TermSig,
     TerminalType, errors::TermResult,
 };
 
+use crate::RELAUNCHED_ARGUMENT;
 #[allow(unused_imports)]
 use crate::errors::RelaunchError;
 
 /// Common environment variable names used in terminal identification.
 pub const TERM_PROGRAM_VAR: &str = "TERM_PROGRAM";
 
-/// Value of `TERM_PROGRAM` defined inside a `VSCode` terminal.
-pub const VSCODE_TERM_PROGRAM: &str = "vscode";
-/// Value of `TERM_PROGRAM` defined inside a default `MacOS` terminal.
-pub const APPLE_TERMINAL_TERM_PROGRAM: &str = "Apple_Terminal";
-
-/// Environment variable for Windows Terminal session.
-pub const WINDOWS_TERMINAL_VAR: &str = "WT_SESSION";
-
 /// A list of known terminal identifiers with their associated signatures.
 pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
     TerminalIdentifier {
         kind: TerminalType::WindowsTerminal,
         target_os: TargetOperatingSystem::Windows,
-        signatures: &[TermSig::EnvVarExists(WINDOWS_TERMINAL_VAR)],
+        signatures: &[TermSig::EnvVarExists("WT_SESSION")],
     },
     TerminalIdentifier {
         kind: TerminalType::VSCode,
         target_os: TargetOperatingSystem::Any,
-        signatures: &[TermSig::EnvVar(TERM_PROGRAM_VAR, VSCODE_TERM_PROGRAM)],
+        signatures: &[TermSig::TermProgram("vscode")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::Nvim,
+        target_os: TargetOperatingSystem::Any,
+        signatures: &[TermSig::EnvVarExists("NVIM")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::ITerm2,
+        target_os: TargetOperatingSystem::Any,
+        signatures: &[TermSig::EnvVarExists("ITERM_SESSION_ID")],
     },
     TerminalIdentifier {
         kind: TerminalType::MacOS,
         target_os: TargetOperatingSystem::MacOS,
-        signatures: &[TermSig::EnvVar(
-            TERM_PROGRAM_VAR,
-            APPLE_TERMINAL_TERM_PROGRAM,
-        )],
+        signatures: &[TermSig::TermProgram("Apple_Terminal")],
     },
 ];
 
+macro_rules! for_target {
+    ($target_os: literal, $code:block) => {{
+        #[cfg(target_os = $target_os)]
+        $code
+
+        #[cfg(not(target_os = $target_os))]
+        {
+            false
+        }
+    }};
+    ($self:expr, $target_os: literal, $code:block) => {{
+        #[cfg(not(target_os = $target_os))]
+        {
+            Err(RelaunchError::UnsupportedTerminalProvider(
+                $self.terminal_type(),
+            ))
+        }
+
+        #[cfg(target_os = $target_os)]
+        $code
+    }};
+}
+
 // Providers..
 
-/// Terminal provider for Windows Terminal.
+/// Retrieves the current executable path, working directory, and command-line arguments.
+#[inline]
+#[must_use]
+fn get_relaunch_params() -> (PathBuf, PathBuf, Vec<String>) {
+    let current_exe = std::env::current_exe().expect("Failed to get current executable path");
+    let current_wd = std::env::current_dir().expect("Failed to get current working directory");
+    let args: Vec<String> = [RELAUNCHED_ARGUMENT.to_string()]
+        .into_iter()
+        .chain(std::env::args().skip(1))
+        .collect();
+
+    (current_exe, current_wd, args)
+}
+
+/// Terminal provider for `Windows Terminal`.
 pub struct WindowsTerminalProvider;
 
 impl TerminalProvider for WindowsTerminalProvider {
@@ -50,8 +90,7 @@ impl TerminalProvider for WindowsTerminalProvider {
     }
 
     fn is_installed(&self) -> bool {
-        #[cfg(target_os = "windows")]
-        {
+        for_target!("windows", {
             /// Path to Windows Terminal install in registry.
             const WINDOWS_TERMINAL_INSTALL_PATH: &str =
                 r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\wt.exe";
@@ -61,44 +100,83 @@ impl TerminalProvider for WindowsTerminalProvider {
 
             let hkcu = RegKey::predef(HKEY_CURRENT_USER);
             hkcu.open_subkey(WINDOWS_TERMINAL_INSTALL_PATH).is_ok()
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            false
-        }
+        })
     }
 
     fn relaunch_in_terminal(&self) -> TermResult<()> {
-        #[cfg(not(windows))]
-        {
-            Err(RelaunchError::UnsupportedTerminalProvider(
-                TerminalType::WindowsTerminal,
-            ))
-        }
-
-        #[cfg(windows)]
-        {
-            use std::env;
-            use std::process::Command;
-
-            use crate::RELAUNCHED_ARGUMENT;
-
-            let current_exe = env::current_exe()?;
-            let current_wd = env::current_dir()?;
-            let args: Vec<String> = env::args().skip(1).collect();
+        for_target!(self, "windows", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
 
             Command::new("wt")
                 .arg("new-tab")
                 .arg("--startingDirectory")
-                .arg(current_wd)
+                .arg(curr_wd)
                 .arg("--")
-                .arg(current_exe)
-                .arg(RELAUNCHED_ARGUMENT)
+                .arg(curr_exe)
                 .args(&args)
                 .spawn()?;
 
             Ok(())
-        }
+        })
+    }
+}
+
+/// Escapes a string for safe embedding in a shell single-quoted string.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// Escapes a list of arguments for safe embedding in a shell command.
+fn shell_escape_args(args: &[String]) -> String {
+    args.iter()
+        .map(|a| shell_escape(a))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Terminal provider for `ITerm2`.
+pub struct ITerm2Provider;
+
+impl TerminalProvider for ITerm2Provider {
+    fn terminal_type(&self) -> TerminalType {
+        TerminalType::ITerm2
+    }
+
+    fn is_installed(&self) -> bool {
+        for_target!("macos", {
+            const ITERM_APP: &str = "/Applications/iTerm2.app";
+
+            std::path::Path::new(ITERM_APP).exists()
+        })
+    }
+
+    fn relaunch_in_terminal(&self) -> TermResult<()> {
+        for_target!(self, "windows", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            let quoted_wd = shell_escape(&curr_wd.to_string_lossy());
+            let quoted_exe = shell_escape(&curr_exe.to_string_lossy());
+            let quoted_args = shell_escape_args(&args);
+
+            let cmd = format!("cd {quoted_wd}; exec {quoted_exe} {quoted_args}");
+
+            let script = format!(
+                r#"
+tell application "iTerm2"
+    activate
+    tell current window
+        create tab with default profile
+        tell current session
+            write text "{cmd}"
+        end tell
+    end tell
+end tell
+"#
+            );
+
+            Command::new("osascript").arg("-e").arg(script).spawn()?;
+
+            Ok(())
+        })
     }
 }
