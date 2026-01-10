@@ -344,7 +344,7 @@ pub enum TerminalSignature {
     /// Returns `true` if the windows console delegation is set to a value in the windows registry.
     WindowsConsoleDelegationSet,
 
-    /// Returns `true` if the windows console delegation is set to a value in the windows registry.
+    /// Returns `true` if any of the given terminal signatures are met (I.e. `OR` logic).
     Any(&'static [TerminalSignature]),
 }
 
