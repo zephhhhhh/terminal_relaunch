@@ -12,17 +12,11 @@ use crate::errors::RelaunchError;
 
 /// Common environment variable names used in terminal identification.
 pub const TERM_PROGRAM_VAR: &str = "TERM_PROGRAM";
+/// Common environment variable names used in terminal identification.
+pub const TERM_VAR: &str = "TERM";
 
 /// A list of known terminal identifiers with their associated signatures.
 pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
-    TerminalIdentifier {
-        kind: TerminalType::WindowsTerminal,
-        target_os: TargetOperatingSystem::Windows,
-        signatures: &[TermSig::Any(&[
-            TermSig::WindowsConsoleDelegationSet,
-            TermSig::EnvVarExists("WT_SESSION"),
-        ])],
-    },
     TerminalIdentifier {
         kind: TerminalType::VSCode,
         target_os: TargetOperatingSystem::Any,
@@ -42,6 +36,34 @@ pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
         kind: TerminalType::MacOS,
         target_os: TargetOperatingSystem::MacOS,
         signatures: &[TermSig::TermProgram("Apple_Terminal")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::Alacritty,
+        target_os: TargetOperatingSystem::Any,
+        signatures: &[TermSig::EnvVarExists("ALACRITTY_LOG")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::WezTerm,
+        target_os: TargetOperatingSystem::Any,
+        signatures: &[TermSig::TermProgram("WezTerm")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::Kitty,
+        target_os: TargetOperatingSystem::MacOS,
+        signatures: &[TermSig::TermVar("xterm-kitty")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::Ghostty,
+        target_os: TargetOperatingSystem::MacOS,
+        signatures: &[TermSig::TermProgram("ghostty")],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::WindowsTerminal,
+        target_os: TargetOperatingSystem::Windows,
+        signatures: &[TermSig::Any(&[
+            TermSig::WindowsConsoleDelegationSet,
+            TermSig::EnvVarExists("WT_SESSION"),
+        ])],
     },
 ];
 

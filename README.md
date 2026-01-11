@@ -68,9 +68,17 @@ if *SUPPORTS_RGB_ANSI_COLOURS {
 
 ### Detection
 
-- `Windows Terminal`, `CMD/PowerShell`,
-- NVIM Integrated Terminal
-- `Terminal.app`, `ITerm2`, Generic Third Party `MacOS` terminal catch-all
+- Windows Specific:
+    - `Windows Terminal`
+    - `CMD/PowerShell`
+- MacOS Specific:
+    - `Terminal.app`
+    - `ITerm2`
+    - `Kitty`
+    - `Ghostty`
+- Editor terminals
+    - `VSCode`
+    - `NVIM`
 - Generic Linux Terminals
 
 ### Relaunching

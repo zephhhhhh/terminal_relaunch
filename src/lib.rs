@@ -47,12 +47,23 @@
 //! ## Supported Terminals
 //!
 //! ### Detection
-//! - `Windows Terminal`, `CMD/PowerShell`
-//! - `Terminal.app`, Generic Third Party `MacOS` terminal catch-all
-//! - Generic `Linux` Terminals
+//!
+//! - `Windows` Specific:
+//!     - `Windows Terminal`
+//!     - `CMD/PowerShell`
+//! - `MacOS` Specific:
+//!     - `Terminal.app`
+//!     - `ITerm2`
+//!     - `Kitty`
+//!     - `Ghostty`
+//! - Editor terminals
+//!     - `VSCode`
+//!     - `NVIM`
+//! - Generic Linux Terminals
 //!
 //! ### Relaunching
 //! - `Windows Terminal`
+//! - `ITerm2`
 
 #![warn(clippy::pedantic)]
 
@@ -66,6 +77,7 @@ use std::sync::atomic;
 
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::terminal_providers::TERM_VAR;
 use crate::{
     errors::{RelaunchError, TermResult},
     terminal_providers::{ITerm2Provider, TERM_PROGRAM_VAR, WindowsTerminalProvider},
@@ -90,6 +102,10 @@ pub enum TerminalType {
     MacOS,
     /// Third party `MacOS` terminal `iTerm2`.
     ITerm2,
+    /// Third party `MacOS` terminal `Kitty`.
+    Kitty,
+    /// Third party `MacOS` terminal `Ghostty`.
+    Ghostty,
     /// Third party `MacOS` terminal (`iTerm2`, `Alacritty`, etc).
     /// We just assume that if we are on `MacOS` and not in the default terminal,
     /// then we are in a third party terminal.
@@ -101,6 +117,10 @@ pub enum TerminalType {
     ///
     /// **TODO**: Improve detection for specific Linux terminals.
     LinuxTerminal,
+
+    // Cross platform editor terminals..
+    WezTerm,
+    Alacritty,
 
     // Editor terminals..
     /// `VS Code` embedded terminal.
@@ -119,11 +139,15 @@ impl TerminalType {
             Self::WindowsCMD => "Windows CMD",
             Self::WindowsTerminal => "Windows Terminal",
             Self::MacOS => "MacOS Terminal",
-            Self::ITerm2 => "iTerm2 Terminal",
+            Self::ITerm2 => "iTerm2",
+            Self::Kitty => "Kitty",
+            Self::Ghostty => "Ghostty",
             Self::ThirdPartyMacOSTerminal => "Third Party MacOS Terminal",
+            Self::LinuxTerminal => "Linux Terminal",
+            Self::Alacritty => "Alacritty",
+            Self::WezTerm => "WezTerm",
             Self::VSCode => "VSCode Terminal",
             Self::Nvim => "NVIM Terminal",
-            Self::LinuxTerminal => "Linux Terminal",
         }
     }
 
@@ -137,9 +161,7 @@ impl TerminalType {
             Self::WindowsTerminal => Some("wt.exe"),
             Self::VSCode => Some("Code.exe"),
             Self::ITerm2 => Some("iTerm2.app"),
-            Self::Unknown | Self::ThirdPartyMacOSTerminal | Self::LinuxTerminal | Self::Nvim => {
-                None
-            }
+            _ => None,
         }
     }
 
@@ -149,10 +171,14 @@ impl TerminalType {
     pub fn target_os(&self) -> TargetOperatingSystem {
         match self {
             Self::WindowsCMD | Self::WindowsTerminal => TargetOperatingSystem::Windows,
-            Self::MacOS | Self::ITerm2 | Self::ThirdPartyMacOSTerminal => {
-                TargetOperatingSystem::MacOS
+            Self::MacOS
+            | Self::ITerm2
+            | Self::Ghostty
+            | Self::Kitty
+            | Self::ThirdPartyMacOSTerminal => TargetOperatingSystem::MacOS,
+            Self::VSCode | Self::Nvim | Self::Alacritty | Self::WezTerm => {
+                TargetOperatingSystem::Any
             }
-            Self::VSCode | Self::Nvim => TargetOperatingSystem::Any,
             Self::LinuxTerminal => TargetOperatingSystem::Linux,
             Self::Unknown => TargetOperatingSystem::Invalid,
         }
@@ -170,6 +196,10 @@ impl TerminalType {
             | Self::Nvim
             | Self::ITerm2
             | Self::ThirdPartyMacOSTerminal
+            | Self::Alacritty
+            | Self::WezTerm
+            | Self::Kitty
+            | Self::Ghostty
             | Self::LinuxTerminal => true,
         }
     }
@@ -185,6 +215,10 @@ impl TerminalType {
             | Self::Nvim
             | Self::ITerm2
             | Self::ThirdPartyMacOSTerminal
+            | Self::Alacritty
+            | Self::WezTerm
+            | Self::Kitty
+            | Self::Ghostty
             | Self::LinuxTerminal => true,
         }
     }
@@ -341,6 +375,8 @@ pub enum TerminalSignature {
     EnvVar(&'static str, &'static str),
     /// The environment variable `TERM_PROGRAM` must have a specific value.
     TermProgram(&'static str),
+    /// The environment variable `TERM` must have a specific value.
+    TermVar(&'static str),
     /// Returns `true` if the windows console delegation is set to a value in the windows registry.
     WindowsConsoleDelegationSet,
 
@@ -391,6 +427,7 @@ impl TerminalSignature {
     #[inline]
     #[must_use]
     pub fn check(&self) -> bool {
+        logging::info!("Checking terminal signature: {:?}", self);
         match self {
             Self::EnvVarExists(var_name) => std::env::var(var_name).is_ok(),
             Self::EnvVar(var, value) => {
@@ -399,6 +436,10 @@ impl TerminalSignature {
             }
             Self::TermProgram(var_value) => {
                 matches!(std::env::var(TERM_PROGRAM_VAR).ok().as_deref(),
+                    Some(v) if v.eq_ignore_ascii_case(var_value))
+            }
+            Self::TermVar(var_value) => {
+                matches!(std::env::var(TERM_VAR).ok().as_deref(),
                     Some(v) if v.eq_ignore_ascii_case(var_value))
             }
             Self::WindowsConsoleDelegationSet => check_for_windows_registry_delegation(),
