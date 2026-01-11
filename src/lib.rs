@@ -435,7 +435,6 @@ impl TerminalSignature {
     #[inline]
     #[must_use]
     pub fn check(&self) -> bool {
-        logging::info!("Checking terminal signature: {:?}", self);
         match self {
             Self::EnvVarExists(var_name) => std::env::var(var_name).is_ok(),
             Self::EnvVar(var, value) => {
