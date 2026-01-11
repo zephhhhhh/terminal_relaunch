@@ -176,9 +176,7 @@ impl TerminalProvider for ITerm2Provider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const ITERM_APP: &str = "/Applications/iTerm.app";
-
-            std::path::Path::new(ITERM_APP).exists()
+            std::path::Path::new("/Applications/iTerm.app").exists()
         })
     }
 
@@ -240,9 +238,7 @@ impl TerminalProvider for GhosttyProvider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const GHOSTTY_APP: &str = "/Applications/Ghostty.app";
-
-            std::path::Path::new(GHOSTTY_APP).exists()
+            std::path::Path::new("/Applications/Ghostty.app").exists()
         })
     }
 
@@ -275,9 +271,7 @@ impl TerminalProvider for KittyProvider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const KITTY_APP: &str = "/Applications/kitty.app";
-
-            std::path::Path::new(KITTY_APP).exists()
+            std::path::Path::new("/Applications/kitty.app").exists()
         })
     }
 
@@ -308,15 +302,48 @@ impl TerminalProvider for AlacrittyProvider {
     }
 
     fn is_installed(&self) -> bool {
-        for_target!("macos", {
-            const ALACRITTY_APP: &str = "/Applications/alacritty.app";
+        #[cfg(target_os = "macos")]
+        {
+            std::path::Path::new("/Applications/alacritty.app").exists()
+        }
 
-            std::path::Path::new(ALACRITTY_APP).exists()
-        })
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("alacritty")
+                .arg("--version")
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false)
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            false
+        }
     }
 
     fn relaunch_in_terminal(&self) -> TermResult<()> {
-        for_target!(self, "macos", {
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            Command::new("cmd")
+                .current_dir(curr_wd)
+                .arg("/C")
+                .arg("alacritty")
+                .creation_flags(0x8 | 0x200)
+                .arg("-e")
+                .arg(curr_exe)
+                .args(args)
+                .spawn()?;
+
+            Ok(())
+        }
+
+        #[cfg(target_os = "macos")]
+        {
             let (curr_exe, curr_wd, args) = get_relaunch_params();
 
             Command::new("open")
@@ -330,7 +357,14 @@ impl TerminalProvider for AlacrittyProvider {
                 .spawn()?;
 
             Ok(())
-        })
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            Err(RelaunchError::UnsupportedTerminalProvider(
+                self.terminal_type(),
+            ))
+        }
     }
 }
 
@@ -344,9 +378,7 @@ impl TerminalProvider for WezTermProvider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const WEZ_TERM_APP: &str = "/Applications/WezTerm.app";
-
-            std::path::Path::new(WEZ_TERM_APP).exists()
+            std::path::Path::new("/Applications/WezTerm.app").exists()
         })
     }
 
