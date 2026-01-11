@@ -85,6 +85,7 @@ if *SUPPORTS_RGB_ANSI_COLOURS {
 
 - `Windows Terminal`
 - `ITerm2` (MacOS)
+- `Ghostty` (MacOS)
 
 ## License
 

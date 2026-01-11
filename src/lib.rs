@@ -64,6 +64,7 @@
 //! ### Relaunching
 //! - `Windows Terminal`
 //! - `ITerm2`
+//! - `Ghostty`
 
 #![warn(clippy::pedantic)]
 
@@ -77,6 +78,7 @@ use std::sync::atomic;
 
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::terminal_providers::GhosttyProvider;
 use crate::terminal_providers::TERM_VAR;
 use crate::{
     errors::{RelaunchError, TermResult},
@@ -675,6 +677,7 @@ pub fn get_provider_for_terminal(terminal_type: TerminalType) -> Option<Box<dyn 
     match terminal_type {
         TerminalType::WindowsTerminal => Some(Box::new(WindowsTerminalProvider)),
         TerminalType::ITerm2 => Some(Box::new(ITerm2Provider)),
+        TerminalType::Ghostty => Some(Box::new(GhosttyProvider)),
         _ => None,
     }
 }

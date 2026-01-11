@@ -229,3 +229,37 @@ end tell
         })
     }
 }
+
+pub struct GhosttyProvider;
+
+impl TerminalProvider for GhosttyProvider {
+    fn terminal_type(&self) -> TerminalType {
+        TerminalType::Ghostty
+    }
+
+    fn is_installed(&self) -> bool {
+        for_target!("macos", {
+            const GHOSTTY_APP: &str = "/Applications/Ghostty.app";
+
+            std::path::Path::new(GHOSTTY_APP).exists()
+        })
+    }
+
+    fn relaunch_in_terminal(&self) -> TermResult<()> {
+        for_target!(self, "macos", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            Command::new("open")
+                .arg("-na")
+                .arg("Ghostty")
+                .arg("--args")
+                .arg("-e")
+                .arg(curr_exe)
+                .args(args)
+                .current_dir(curr_wd)
+                .spawn()?;
+
+            Ok(())
+        })
+    }
+}
