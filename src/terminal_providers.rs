@@ -263,3 +263,36 @@ impl TerminalProvider for GhosttyProvider {
         })
     }
 }
+
+pub struct KittyProvider;
+
+impl TerminalProvider for KittyProvider {
+    fn terminal_type(&self) -> TerminalType {
+        TerminalType::Kitty
+    }
+
+    fn is_installed(&self) -> bool {
+        for_target!("macos", {
+            const KITTY_APP: &str = "/Applications/kitty.app";
+
+            std::path::Path::new(KITTY_APP).exists()
+        })
+    }
+
+    fn relaunch_in_terminal(&self) -> TermResult<()> {
+        for_target!(self, "macos", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            Command::new("open")
+                .arg("-na")
+                .arg("kitty")
+                .arg("--args")
+                .arg(curr_exe)
+                .args(args)
+                .current_dir(curr_wd)
+                .spawn()?;
+
+            Ok(())
+        })
+    }
+}
