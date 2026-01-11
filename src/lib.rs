@@ -65,6 +65,8 @@
 //! - `Windows Terminal`
 //! - `ITerm2`
 //! - `Ghostty`
+//! - `Kitty`
+//! - `Alacritty`
 
 #![warn(clippy::pedantic)]
 
@@ -78,6 +80,7 @@ use std::sync::atomic;
 
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::terminal_providers::AlacrittyProvider;
 use crate::terminal_providers::GhosttyProvider;
 use crate::terminal_providers::KittyProvider;
 use crate::terminal_providers::TERM_VAR;
@@ -680,6 +683,7 @@ pub fn get_provider_for_terminal(terminal_type: TerminalType) -> Option<Box<dyn 
         TerminalType::ITerm2 => Some(Box::new(ITerm2Provider)),
         TerminalType::Ghostty => Some(Box::new(GhosttyProvider)),
         TerminalType::Kitty => Some(Box::new(KittyProvider)),
+        TerminalType::Alacritty => Some(Box::new(AlacrittyProvider)),
         _ => None,
     }
 }

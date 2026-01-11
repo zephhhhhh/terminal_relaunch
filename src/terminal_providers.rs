@@ -230,6 +230,7 @@ end tell
     }
 }
 
+/// Terminal provider for `Ghostty`.
 pub struct GhosttyProvider;
 
 impl TerminalProvider for GhosttyProvider {
@@ -264,6 +265,7 @@ impl TerminalProvider for GhosttyProvider {
     }
 }
 
+/// Terminal provider for `Kitty`.
 pub struct KittyProvider;
 
 impl TerminalProvider for KittyProvider {
@@ -287,6 +289,41 @@ impl TerminalProvider for KittyProvider {
                 .arg("-na")
                 .arg("kitty")
                 .arg("--args")
+                .arg(curr_exe)
+                .args(args)
+                .current_dir(curr_wd)
+                .spawn()?;
+
+            Ok(())
+        })
+    }
+}
+
+/// Terminal provider for `Alacritty`.
+pub struct AlacrittyProvider;
+
+impl TerminalProvider for AlacrittyProvider {
+    fn terminal_type(&self) -> TerminalType {
+        TerminalType::Alacritty
+    }
+
+    fn is_installed(&self) -> bool {
+        for_target!("macos", {
+            const KITTY_APP: &str = "/Applications/alacritty.app";
+
+            std::path::Path::new(KITTY_APP).exists()
+        })
+    }
+
+    fn relaunch_in_terminal(&self) -> TermResult<()> {
+        for_target!(self, "macos", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            Command::new("open")
+                .arg("-na")
+                .arg("alacritty")
+                .arg("--args")
+                .arg("-e")
                 .arg(curr_exe)
                 .args(args)
                 .current_dir(curr_wd)
