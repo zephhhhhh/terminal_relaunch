@@ -474,13 +474,20 @@ pub const fn get_default_terminal_for_os(os: OperatingSystem) -> TerminalType {
     }
 }
 
+/// Returns an iterator over possible terminal identifiers.
+#[inline]
+pub fn get_all_terminal_identifiers() -> impl Iterator<Item = &'static TerminalIdentifier> {
+    terminal_providers::TERMINAL_IDENTIFIERS
+        .iter()
+        .chain(terminal_providers::FINAL_TERMINAL_IDENTIFIERS)
+}
+
 /// Returns an iterator over possible terminal identifiers for the given operating system.
 #[inline]
 pub fn get_possible_terminal_identifiers_for(
     os: OperatingSystem,
 ) -> impl Iterator<Item = &'static TerminalIdentifier> {
-    terminal_providers::TERMINAL_IDENTIFIERS
-        .iter()
+    get_all_terminal_identifiers()
         .filter(move |identifier| os.compatible_with_target(identifier.target_os))
 }
 

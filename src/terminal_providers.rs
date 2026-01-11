@@ -52,6 +52,11 @@ pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
         target_os: TargetOperatingSystem::MacOS,
         signatures: &[TermSig::TermProgram("ghostty")],
     },
+];
+
+/// A list of terminal identifiers to check last, typically for terminals that may be falsely detected when
+/// checking other terminals first.
+pub const FINAL_TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
     TerminalIdentifier {
         kind: TerminalType::WindowsTerminal,
         target_os: TargetOperatingSystem::Windows,
