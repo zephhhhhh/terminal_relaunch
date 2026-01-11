@@ -10,9 +10,9 @@ use crate::RELAUNCHED_ARGUMENT;
 #[allow(unused_imports)]
 use crate::errors::RelaunchError;
 
-/// Common environment variable names used in terminal identification.
+/// Common environment variable `TERM_PROGRAM` used in terminal identification.
 pub const TERM_PROGRAM_VAR: &str = "TERM_PROGRAM";
-/// Common environment variable names used in terminal identification.
+/// Common environment variable `TERM` used in terminal identification.
 pub const TERM_VAR: &str = "TERM";
 
 /// A list of known terminal identifiers with their associated signatures.
