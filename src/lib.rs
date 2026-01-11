@@ -67,6 +67,7 @@
 //! - `Ghostty`
 //! - `Kitty`
 //! - `Alacritty`
+//! - `WezTerm`
 
 #![warn(clippy::pedantic)]
 
@@ -84,6 +85,7 @@ use crate::terminal_providers::AlacrittyProvider;
 use crate::terminal_providers::GhosttyProvider;
 use crate::terminal_providers::KittyProvider;
 use crate::terminal_providers::TERM_VAR;
+use crate::terminal_providers::WezTermProvider;
 use crate::{
     errors::{RelaunchError, TermResult},
     terminal_providers::{ITerm2Provider, TERM_PROGRAM_VAR, WindowsTerminalProvider},
@@ -684,6 +686,7 @@ pub fn get_provider_for_terminal(terminal_type: TerminalType) -> Option<Box<dyn 
         TerminalType::Ghostty => Some(Box::new(GhosttyProvider)),
         TerminalType::Kitty => Some(Box::new(KittyProvider)),
         TerminalType::Alacritty => Some(Box::new(AlacrittyProvider)),
+        TerminalType::WezTerm => Some(Box::new(WezTermProvider)),
         _ => None,
     }
 }

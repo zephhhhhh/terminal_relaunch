@@ -88,6 +88,7 @@ if *SUPPORTS_RGB_ANSI_COLOURS {
 - `Ghostty` (MacOS)
 - `Kitty` (MacOS)
 - `Alacritty` (MacOS)
+- `WezTerm` (MacOS)
 
 ## License
 

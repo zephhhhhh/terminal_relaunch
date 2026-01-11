@@ -309,9 +309,9 @@ impl TerminalProvider for AlacrittyProvider {
 
     fn is_installed(&self) -> bool {
         for_target!("macos", {
-            const KITTY_APP: &str = "/Applications/alacritty.app";
+            const ALACRITTY_APP: &str = "/Applications/alacritty.app";
 
-            std::path::Path::new(KITTY_APP).exists()
+            std::path::Path::new(ALACRITTY_APP).exists()
         })
     }
 
@@ -322,6 +322,41 @@ impl TerminalProvider for AlacrittyProvider {
             Command::new("open")
                 .arg("-na")
                 .arg("alacritty")
+                .arg("--args")
+                .arg("-e")
+                .arg(curr_exe)
+                .args(args)
+                .current_dir(curr_wd)
+                .spawn()?;
+
+            Ok(())
+        })
+    }
+}
+
+/// Terminal provider for `WezTerm`.
+pub struct WezTermProvider;
+
+impl TerminalProvider for WezTermProvider {
+    fn terminal_type(&self) -> TerminalType {
+        TerminalType::WezTerm
+    }
+
+    fn is_installed(&self) -> bool {
+        for_target!("macos", {
+            const WEZ_TERM_APP: &str = "/Applications/WezTerm.app";
+
+            std::path::Path::new(WEZ_TERM_APP).exists()
+        })
+    }
+
+    fn relaunch_in_terminal(&self) -> TermResult<()> {
+        for_target!(self, "macos", {
+            let (curr_exe, curr_wd, args) = get_relaunch_params();
+
+            Command::new("open")
+                .arg("-na")
+                .arg("WezTerm")
                 .arg("--args")
                 .arg("-e")
                 .arg(curr_exe)
