@@ -33,11 +33,6 @@ pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
         signatures: &[TermSig::EnvVarExists("ITERM_SESSION_ID")],
     },
     TerminalIdentifier {
-        kind: TerminalType::MacOS,
-        target_os: TargetOperatingSystem::MacOS,
-        signatures: &[TermSig::TermProgram("Apple_Terminal")],
-    },
-    TerminalIdentifier {
         kind: TerminalType::Alacritty,
         target_os: TargetOperatingSystem::Any,
         signatures: &[TermSig::EnvVarExists("ALACRITTY_LOG")],
@@ -64,6 +59,11 @@ pub const TERMINAL_IDENTIFIERS: &[TerminalIdentifier] = &[
             TermSig::WindowsConsoleDelegationSet,
             TermSig::EnvVarExists("WT_SESSION"),
         ])],
+    },
+    TerminalIdentifier {
+        kind: TerminalType::MacOS,
+        target_os: TargetOperatingSystem::MacOS,
+        signatures: &[TermSig::TermProgram("Apple_Terminal")],
     },
 ];
 
