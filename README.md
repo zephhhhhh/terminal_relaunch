@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-terminal_relaunch = "0.1.0"
+terminal_relaunch = "0.2.2"
 ```
 
 ## Quick Start
@@ -76,7 +76,10 @@ if *SUPPORTS_RGB_ANSI_COLOURS {
     - `ITerm2`
     - `Kitty`
     - `Ghostty`
-- Editor terminals
+- Other terminals:
+    - `Alacritty`
+    - `WezTerm`
+- Editor terminals:
     - `VSCode`
     - `NVIM`
 - Generic Linux Terminals

@@ -56,12 +56,16 @@
 //!     - `ITerm2`
 //!     - `Kitty`
 //!     - `Ghostty`
-//! - Editor terminals
+//! - Other terminals:
+//!     - `Alacritty`
+//!     - `WezTerm`
+//! - Editor terminals:
 //!     - `VSCode`
 //!     - `NVIM`
 //! - Generic Linux Terminals
 //!
 //! ### Relaunching
+//! 
 //! - `Windows Terminal`
 //! - `ITerm2`
 //! - `Ghostty`
